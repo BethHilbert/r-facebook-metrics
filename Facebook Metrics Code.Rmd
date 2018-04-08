@@ -1,0 +1,499 @@
+---
+title: "Social Media Influence and Brand Engagement"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+Beth Hilbert, Gabrielle Peters and Katelynn Blalock
+BANA 7038 - Data Analysis Methods - Spring 2018
+
+Dataset - http://archive.ics.uci.edu/ml/datasets/Facebook+metrics
+
+  
+# Introduction  
+  
+This research is focused on analyzing social media's role in influencing customers by measuring the impact of status updates and advertisement on Facebook for a particular cosmetic brand. The data used is from the UCI Machine Learning Repository and includes the Facebook Metrics Data Set (see note 1). The data set involves performance metrics of a renowned cosmetic's brand Facebook page. The response variable in the linear regression will be "Page Total Likes". By making the assumption that the total number of page likes is a good representation of brand reputation and social media engagement with consumers this will allow for the analysis of other metics' impact on customer engagement via social media.  
+
+(Note 1) Our dataset is from the UCI Machine Learning Repository. It can be downloaded from http://archive.ics.uci.edu/ml/datasets/Facebook+metrics. Citation: (Moro et al., 2016) Moro, S., Rita, P., & Vala, B. (2016). Predicting social media performance metrics and evaluation of the impact on brand building: A data mining approach. Journal of Business Research, 69(9), 3341-3351.
+
+# 1. Dataset Exploration and Data Cleaning  
+
+## Environment Setup  
+As a first step for the data exploration and cleaning we need to setup the environment by first installing the necessary packages and imported the related libraries. This includes car, ggplot2, mass and psych. Before importing the data we clear the environment to remove an in memory variables. The last step in the setup is to read in the dataset and rename the variables for easy handling.  
+  
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+#install.packages("psych")
+#install.packages('ggplot2', dep = TRUE)
+#install.packages('car', dep = TRUE)
+require(MASS)
+library(ggplot2) 
+library(psych)
+library(car)
+
+rm(list=ls()) # clear environment
+```
+   
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+dataset <- read.csv("dataset_Facebook.csv", sep=";", header=T) # import data
+
+# rename the variable for easy handling
+names(dataset)[1] <- "Page.Total.Likes"
+names(dataset)[2] <- "Type"
+names(dataset)[3] <- "Category"
+names(dataset)[4] <- "Post.Month"
+names(dataset)[5] <- "Post.Weekday"
+names(dataset)[6] <- "Post.Hour"
+names(dataset)[7] <- "Paid"
+names(dataset)[8] <- "Total.Reach"
+names(dataset)[9] <- "Total.Impressions"
+names(dataset)[10] <- "Engaged.Users"
+names(dataset)[11] <- "Consumers"
+names(dataset)[12] <- "Consumptions"
+names(dataset)[13] <- "Impressions.for.Users.with.Likes"
+names(dataset)[14] <- "Reach.by.Users.with.Likes"
+names(dataset)[15] <- "Users.with.Likes.and.Engagement"
+names(dataset)[16] <- "Comment"
+names(dataset)[17] <- "Like"
+names(dataset)[18] <- "Share"
+names(dataset)[19] <- "Total.Interactions"
+```
+
+## Exploratory Data Analysis
+After the data is imported we analyze the data by reviewing the number of observations and the new variable names.There are 500 observations and 19 variables. The new variable names are as follows:
+Page.Total.Likes  
+Type  
+Category  
+Post.Month  
+Post.Weekday  
+Post.Hour  
+Paid  
+Total.Reach  
+Total.Impressions  
+Engaged.Users  
+Consumers  
+Consumptions  
+Impressions.for.Users.with.Likes  
+Reach.by.Users.with.Likes  
+Users.with.Likes.and.Engagement  
+Comment  
+Like  
+Share  
+Total.Interactions  
+  
+In reviewing the descriptive statistics, we found some variables are highly skewed with means and medians significantly different (such as Total.Reach). One of the variables in non-numeric (Type). Some of the variables only have a few discrete options (such as Category has 1, 2, 3).  
+  
+We also review the dataset for missing values and we observe that it does contains missing values, which could potentially cause problems within our model. The impact of missing values can be serious, leading to biased estimates, loss of information, decreased statistical power, increased standard errors, and weakened interpretation of findings. In order to understand the magnitude of missing values within our dataset, we ran a command to determine the percentage of missing values and determined the following variables had the corresponding percentage of missing values:  
+Paid .2%  
+Like .2%  
+Share .2%  
+
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+fields <- names(dataset) # get variable names
+row_count <- nrow(dataset) # get number of observations
+summary(dataset)
+
+any(is.na(dataset)) # check for missing values
+
+# get percentage of missing values for each variable
+for(field in fields) {
+  column <- dataset[[field]]
+  has_na <- is.na(column)
+  missing_data_result <- any(has_na)
+  
+  if(missing_data_result) {
+    percent_na <- (length(column[has_na])/row_count)*100
+    result <- sprintf("%s: %s%%", field, percent_na)
+    print(result)
+  }
+}
+```
+
+## Cleaning Data  
+As part of the data cleaning we evaluated two methods for handling the missing data values: 1) replacing missing values with column mean, or 2) replacing missing data with 0's.  
+
+The main reason for imputing values is to reduce bias due to missing values in order to maintain the sample size. This results in a potentially higher efficiency than deleting observations with missing values. This allows us to utilize the collected data in an incomplete dataset.  
+
+By replacing the missing values with the column mean average we run the risk of multicollinearity, which exists whenever an independent variable is highly correlated with one or more of the other independent variables in a multiple regression equation. Multicollinearity is a problem because it undermines the statistical significance of an independent variable.  
+
+Justification for using the mean substitution is that the mean is a reasonable estimate for a randomly selected observation from a normal distribution. However, with missing values that are not strictly random, the mean substitution method may lead to inconsistent bias. Furthermore, this approach adds no new information but only increases the sample size and leads to an underestimate of the errors within the dataset.  
+
+By replacing the missing values with 0's, we will will tend to underestimate the standard errors and overestimate the level of precision. Thus, a single imputation of "O" gives us more apparent power than the dataset in reality.  
+  
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+# In order to determine the appropriate method for filling in the missing values, the following commands were run:
+
+#OPTION 1: set missing values to 0
+#dataset[is.na(dataset)] <- 0
+
+# OPTION 2: set missing values to the average of column
+numeric_cols <- sapply(dataset, is.numeric) # determine which columns are numeric
+numeric_column_names <- names(dataset[, numeric_cols]) # get the names of those columns
+
+for(name in numeric_column_names) {
+  column <- dataset[[name]]
+  has_na <- is.na(column)
+  missing_data_result <- any(has_na) # determine if the numeric column have missing values
+  
+  if(missing_data_result) {
+    column_average <- mean(column, na.rm=TRUE) # get the average from the remaining observations
+    dataset[[name]][is.na(column)] <- column_average # set any missing values in the column to the average
+  }
+}
+
+# verify there are no remaining missing values
+any(is.na(dataset))
+```
+  
+## Scatter Plot, Histogram, and Correlation Coefficient
+
+We only visualized data with numeric variables; however, we may explore converting non-numeric variables in order for us to make interpretations on the full data set
+Three functions are included in this one matrix. The lower left shows pairwise combinations of continuous variables in scatterplots. The histogram down the diagnal shows the data distribution of each variables. The correlation coefficients in upper right show variables that might be related. This can help pinpoint variables that may have similar correlations to our dataset.  
+
+```{r, echo=FALSE, fig.width=20, fig.height=16}
+# scatter plot matrix, histogram and coorelation
+pairs.panels(dataset)
+```
+  
+# 2. Initial Model Building  
+
+This inital model is looking at all 19 variables within the dataset, with Page Total Likes as the chosen response variable. We plan to look at each variable and determine which ones are significant to build a final, reliable model.  
+
+[Insert Summary Graphic]
+
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+model <- lm(Page.Total.Likes ~ Post.Month+
+              Post.Weekday+
+              Post.Hour+
+              Paid+
+              Total.Reach+
+              Total.Impressions+
+              Engaged.Users+
+              Consumers+
+              Consumptions+
+              Impressions.for.Users.with.Likes+
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              Comment+
+              Like+
+              Share+
+              Total.Interactions,
+              data=dataset)
+
+summary(model)
+```
+  
+# 3. Model Adequacy Checking  
+Model adequacy is evaluated by evaluating residuals. This checks the fit of the model to the observed data. These are referred to as the LINE assumptions. Gross violations of these assumptions can result in an unstable model in which different samples result in totally different models.  
+
+The LINE assumption sare:  
+- Linear relationship  
+- Independent errors  
+- Normally distributed errors  
+- Equal variance in errors  
+  
+## Different Types of Residuals  
+Residuals measure the variability in the response not explained by the model. There are several ways to measure residual. For most of our analysis we used the definition of residual as the observed data minus the fitted data (plot1). But here we also show two results of scaling residuals (which are helpful in identifying outliers and extreme values). Standardized Residuals (plot2) show the residual standardized by it's standard deviation. PRESS residuals (plot3) shows how well the model may perform in predicting new data.  
+  
+```{r, echo=FALSE}
+leverage=lm.influence(model)$hat
+
+#MS Residual
+MSRes=summary(model)$sigma^2
+SSRes=sum((model$residuals-mean(model$residuals))^2)
+
+#standardized residuals
+standardized_res=model$residuals/sqrt(MSRes)
+
+#PRESS residual
+PRESS_res=model$residuals/(1 - leverage)
+
+par(mfrow=c(1,3))
+plot(model$fitted.values,model$residuals,pch=20,ylab="Residual",xlab="Fitted Value", main="Residual")
+abline(h=0,col="grey")
+plot(model$fitted.values,standardized_res,pch=20,ylab="Standardized Residual",xlab="Fitted Value", main="Standardized Residual")
+abline(h=0,col="grey")
+plot(model$fitted.values,PRESS_res,pch=20,ylab="PRESS Residual",xlab="Fitted Value", main="PRESS Residual")
+abline(h=0,col="grey")
+```
+
+## Checking Linearity and Equal variance
+We reevaluate all variables in the dataset to see if they are viable options to remain covariates in our final model. To do this we plot each covariate against the residuals in order to determine if and how they need to be transformed. Each are expected to be linear and equal variance. After reviewing these plots we can see that the Post.Month needs to be transformed because of its nonlinearity, it violates the linearity of errors assuption.  
+  
+```{r, echo=FALSE}
+numeric_dataset <- dataset[,sapply(dataset, is.numeric)]
+par(mfrow=c(1,4))
+for(name in numeric_column_names) {
+  plot(numeric_dataset[[name]],model$residuals, ylab="Residuals", xlab=name)
+  abline(h=0,col="grey")
+}
+```
+
+## Check Normality Assumption
+To check this assumption we plot each covariate against the residual. We use the QQ plot to check the normality assumption. On the plot we plot the residuals for the model and show the QQ line to assist in visualizing the normal distribution. The plot is shown below. From this we can see that the residual plot appears to be a light tailed distribution.  The histogram below confirms this.
+
+```{r, echo=FALSE}
+
+{
+  par(mfrow=c(1,2))
+
+  # QQ Plot
+  qqnorm(model$residuals) #plots residuals
+  qqline(model$residuals) #draws line
+  
+  # Histogram of Residuals
+  hist(model$residuals, xlab="Residuals", main="Histogram of Residuals", breaks=20)
+}
+```
+
+# 4. Transformation   
+Initially only Posts.Month needed transforming. We tried a number of different transformations but found that the most successful transformation was a higher order ploynomial transformation. Part of the transformations with higher order involves centering the variable's data in attempt to remove multicollinearity. We also review the variance inflation factor of the variable. Sometimes, centering the regressor variables can minimize or eliminate at least some of the ill-conditioning that may be present in a polynomial model.  
+
+We can visualize the transformation by creating a model with the original Post.Month values and a second with the transformed Post.Month values and plotting both against residuals.
+
+```{r, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+# centering
+dataset$Post.Month.Centered = dataset$Post.Month - mean(dataset$Post.Month) 
+
+# transforming
+lm(dataset$Page.Total.Likes ~ dataset$Post.Month.Centered+I(dataset$Post.Month.Centered^2)+I(dataset$Post.Month.Centered^3)+I(dataset$Post.Month.Centered^4)) 
+```
+
+```{r, echo=FALSE}
+model2a <- lm(dataset$Page.Total.Likes ~ dataset$Post.Month)
+model2b <- lm(dataset$Page.Total.Likes ~ dataset$Post.Month.Centered+I(dataset$Post.Month.Centered^2)+I(dataset$Post.Month.Centered^3)+I(dataset$Post.Month.Centered^4)) # rebuild model with new x
+
+{
+  par(mfrow=c(1,2))
+  plot(model2a$fitted.values, model2a$residuals, main="Before Transformation", xlab="Fitted", ylab="Residual")
+  abline(h=0,col="grey",lwd=3)
+  plot(model2b$fitted.values, model2b$residuals, main="After Transformation", xlab="Fitted", ylab="Residual")
+  abline(h=0,col="grey",lwd=3)
+}
+```
+
+```{r, echo=FALSE}
+```
+
+# 5. Variable Selection
+Variance inflation factors (VIF) are very useful in determining if multicollinearity is present. Multicollinearity occurs when inddependent variables are strongly correlated and can give very wrong estimates for the betas (intercepts and slopes). The square root of VIF indicates how much larger the standard error is compared with what it would be if that variable were uncorrelated.
+
+After reviewing the VIF results, we see there are 12 variables with a VIF score higher than 10. We proceeded to do backwards elimination of variables, eliminating the highest VIF score each time. After this process we eliminated Post.Month, Total.Impressions, Engaged.Users and Total.Interactions.
+
+## Initial VIF
+[Insert Initial VIF Graphic]
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+model3 <- lm(dataset$Page.Total.Likes ~ dataset$Post.Month.Centered+I(dataset$Post.Month.Centered^2)+I(dataset$Post.Month.Centered^3)+I(dataset$Post.Month.Centered^4)+               dataset$Post.Weekday+
+              dataset$Post.Hour+
+              dataset$Paid+
+              dataset$Total.Reach+
+              dataset$Total.Impressions+
+              dataset$Engaged.Users+
+              dataset$Consumers+
+              dataset$Consumptions+
+              dataset$Impressions.for.Users.with.Likes+
+              dataset$Reach.by.Users.with.Likes+
+              dataset$Users.with.Likes.and.Engagement+
+              dataset$Comment+
+              dataset$Like+
+              dataset$Share+
+              dataset$Total.Interactions)
+
+vif(model3)
+``` 
+## Final VIF
+[Insert Final VIF Graphic]
+
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+
+model4 <- lm(dataset$Page.Total.Likes ~ 
+               #dataset$Post.Month.Centered+I(dataset$Post.Month.Centered^2)+I(dataset$Post.Month.Centered^3)+I(dataset$Post.Month.Centered^4)+           dataset$Post.Weekday+
+              dataset$Post.Hour+
+              dataset$Paid+
+              dataset$Total.Reach+
+              #$Total.Impressions+
+              #dataset$Engaged.Users+
+              dataset$Consumers+
+              dataset$Consumptions+
+              dataset$Impressions.for.Users.with.Likes+
+              dataset$Reach.by.Users.with.Likes+
+              dataset$Users.with.Likes.and.Engagement+
+              dataset$Comment+
+              dataset$Like+
+              dataset$Share#+
+              #dataset$Total.Interactions
+             )
+
+vif(model4)
+``` 
+
+# 6. Re-modeling
+
+## Standardized Regression Coefficients  
+  
+To begin remodeling we start by comparing the influence of each of the variables. Its often difficult to directly compare regression coefficients due to possible varying dimensions, so we scale them. Dimensionless regression coefficients are referred to as standardized regression coefficients. This allows us to compare the relative strength of the coefficients.  We do this by converting the units of each coefficient to a standard unit of measure and viewing the summary.
+  
+[Insert Standardized Summary Graphic]  
+  
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+# transform the data using unit normal scaling 
+dataset_standard <- as.data.frame(apply(numeric_dataset,2,function(x){(x-mean(x))/sd(x)}))
+
+# redo regression for normal units
+model_standard <- lm(Page.Total.Likes ~
+              Post.Hour+
+              Paid+
+              Total.Reach+
+              Consumers+
+              Consumptions+
+              Impressions.for.Users.with.Likes+
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              Comment+
+              Like+
+              Share,
+              data=dataset_standard)
+
+summary(model_standard) # check coefficient
+```
+
+## Partial F Test  
+We used the standardized regression coefficient to determine which coefficients were potentially insignificant. We used a progression of partial F tests to eliminate these insignificant variables from the model.
+
+To further reduce our model we used these results from the standardized regression coefficients to determine which variables to include in a partial F-test. Our partial F-test  tested a subset of variables to see if the slope parameter if significant.
+
+If the resulting p-value is greater than .05 we fail to reject the null hypothesis. This means that after adjusting for other regressors not in the partial F-test in the linear regression, these regressors in the subset are not significant as their slopes are not significantly different than zero.  We eliminated the following as the partial F-test showed that the p-values of the following are greater than .05 and were thus eliminated from the model: 
+Comment (0.08367)
+Paid (0.2045)
+Impressions.for.Users.with.Likes (0.2938)
+Consumptions (0.3682)
+Total.Reach (0.09598)
+
+
+After eliminating these variables from the standardized model, we can see from the results of the summary that all remaining variables are significant.
+
+[Standardized Regression Coefficients After Partial F test]
+
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+
+anova_model1 <- lm(Page.Total.Likes ~
+              Post.Hour+
+              Paid+
+              Total.Reach+
+              Consumers+
+              Consumptions+
+              Impressions.for.Users.with.Likes+
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              Comment+
+              Like+
+              Share,
+              data=dataset)
+
+anova_model2 <- lm(Page.Total.Likes ~
+              Post.Hour+
+              #Paid+ # 2 (0.2045)
+              #Total.Reach+ # 5 (0.09598)
+              Consumers+
+              #Consumptions+ # 4 (0.3682)
+              #Impressions.for.Users.with.Likes+ # 3 (0.2938)
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              #Comment+ # 1 (0.08367)
+              Like+ # 6 (0.000711)
+              Share,
+              data=dataset)
+
+anova(anova_model1, anova_model2)
+
+# redo regression for normal units
+model_standard <- lm(Page.Total.Likes ~
+              Post.Hour+
+              #Paid+
+              #Total.Reach+
+              Consumers+
+              #Consumptions+
+              #Impressions.for.Users.with.Likes+
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              #Comment+
+              Like+
+              Share,
+              data=dataset_standard)
+
+summary(model_standard) # check coefficient
+
+#barplot(model_standard$coef) # visualize influence of variables
+```
+
+# 7. Model Adequacy Re-checking  
+  
+## Check Residuals  
+Before finalizing our model, we need to recheck residuals to be sure that the LINE assumptions have not been violated with this new model. First by reevaluating the remaining variables in the dataset by plotting each covariate against the residuals in the new model to ensure that each are linear and have equal variance. Then we rerun the QQ plot to check the normality assumption. From this we can see that the normal distribution appears to have a negative skew thus me must transform the predictor variable.  
+
+```{r, echo=FALSE}
+
+model_new <- lm(Page.Total.Likes ~
+              Post.Hour+
+              Consumers+
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              Like+
+              Share,
+              data=dataset)
+
+#summary(model_new)
+
+names_new = c('Post.Hour', 'Consumers', 'Reach.by.Users.with.Likes', 'Users.with.Likes.and.Engagement', 'Like', 'Share')
+
+par(mfrow=c(1,3))
+for(name in names_new) {
+  plot(dataset[[name]],model_new$residuals, ylab="Residuals", xlab=name)
+  abline(h=0,col="grey")
+}
+
+{
+  par(mfrow=c(1,2))
+
+  # QQ Plot
+  qqnorm(model_new$residuals) #plots residuals
+  qqline(model_new$residuals) #draws line
+  
+  # Histogram of Residuals
+  hist(model_new$residuals, xlab="Residuals", main="Histogram of Residuals", breaks=20)
+}
+```
+
+## Transform Regressor to Adjust for Non-normal Distribution  
+We determined from the QQ plot that there was a slight negative skew and ran a boxcox power transformation on the new model and found that the fit would not be improved from a log transformation. To prove this we ran the log transformation on the predictor and found the results to be similar after transformation. 
+
+```{r, echo=FALSE}
+boxcox(model_new)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+dataset$log.Page.Total.Likes=log(dataset$Page.Total.Likes)  #transform y with sqrt
+model_new_log=lm(log.Page.Total.Likes ~ Post.Hour+
+              Consumers+
+              Reach.by.Users.with.Likes+
+              Users.with.Likes.and.Engagement+
+              Like+
+              Share, data = dataset, main="transform") #rebuild model with new y
+{
+  plot(model_new$fitted.values,model_new_log$residuals, ylab="Log", xlab="Residuals")
+  abline(h=0)
+}
+```
+
+# 8. Conclusion - Finalizing the Model
+
+In our final model our response is Page.Total.Likes and our covariates are Post.Hour, Consumers, Reach.by.Users.with.Likes, Users.with.Likes.and.Engagement, Like and Share.  
+
+Page.Total.Likes = 1.295e+05 + (-5.765e+02 * Post.Hour) + (-9.184e+00 * Consumers) + (-5.636e-01 * Reach.by.Users.with.Likes)
+                      + (1.481e+01 * Users.with.Likes.and.Engagement) + (2.164e+01 * Like) + (-1.330e+02 * Share)
+
+[Insert Final Summary Graphic]
+
+```{r, echo=FALSE, results='hide', message=FALSE, error=FALSE, warning=FALSE}
+summary(model_new)
+```
