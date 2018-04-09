@@ -1,8 +1,8 @@
 # Linear Regression on Facebook Metrics (using R Studio)
 
-=====================
 
-R Studio project initially complted February 2018. Attached report and presentation were written for audience of statiticians. 
+
+R Studio project initially completed February 2018. Attached report and presentation were written for audience of statiticians. 
 
 Goal
 --------------------
